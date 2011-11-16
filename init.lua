@@ -15,7 +15,8 @@ end
 local preprocessor = "gcc -E -P" --"cl /EP"
 local include_flag = " -I "
 local include_dirs = {}
-local function ffi_process_headers ( headerfiles )
+local function ffi_process_headers ( headerfiles , defines )
+	defines = defines or { }
 	local input
 	if jit.os == "Windows" then
 		input = { }
@@ -38,6 +39,15 @@ local function ffi_process_headers ( headerfiles )
 		input , "|";
 		preprocessor ;
 	}
+	for k , v in pairs ( defines ) do
+		local def
+		if type ( v ) == "string" then
+			def = k .. [[=]] .. v
+		elseif v == true then
+			def = k
+		end
+		tblinsert ( cmdline , [[-D"]] .. escape ( def ) .. [["]] )
+	end
 	for i , dir in ipairs ( include_dirs ) do
 		tblinsert ( cmdline , [[-I"]] .. escape ( dir ) .. [["]] )
 	end
@@ -78,13 +88,13 @@ local function ffi_process_defines ( headerfile , defines )
 	return defines
 end
 
-local function ffi_defs ( defs_file , headers , skipcdef )
+local function ffi_defs ( defs_file , headers , skipcdef , defines )
 	local fd = ioopen ( defs_file )
 	local s
 	if fd then
 		s = fd:read ( "*a" )
 	else
-		s = ffi_process_headers ( headers )
+		s = ffi_process_headers ( headers , defines )
 		fd = assert ( ioopen ( defs_file , "w" ) )
 		assert ( fd:write ( s ) )
 	end
