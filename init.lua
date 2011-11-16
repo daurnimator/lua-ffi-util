@@ -14,7 +14,7 @@ local function escape ( x )
 end
 local preprocessor = "gcc -E -P" --"cl /EP"
 local include_flag = " -I "
-local include_dirs = {}
+local include_dirs = { }
 local function ffi_process_headers ( headerfiles , defines )
 	defines = defines or { }
 	local input
@@ -115,6 +115,9 @@ local function ffi_add_include_dir ( dir )
 	tblinsert ( include_dirs , dir )
 end
 
+if jit.os == "Linux" or jit.os == "OSX" or jit.os == "POSIX" or jit.os == "BSD" then
+	ffi_add_include_dir [[/usr/include/]]
+end
 
 return {
 	ffi_process_headers 	= ffi_process_headers ;
