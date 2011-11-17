@@ -12,46 +12,40 @@ local escapechars = [["\>|&]]
 local function escape ( x )
 	return ( x:gsub ( "[" .. escapechars .. "]" , [[\%1]] ) )
 end
-local preprocessor = "gcc -E -P" --"cl /EP"
+local preprocessor = "cpp -P" --"cl /EP"
+local defineprocessor = "cpp -dM"
+local definestr = ""
 local include_flag = " -I "
 local include_dirs = { }
 local function ffi_process_headers ( headerfiles , defines )
 	defines = defines or { }
-	local input
-	if jit.os == "Windows" then
-		input = { }
-		for i , v in ipairs ( headerfiles ) do
-			tblinsert ( input , [[echo #include "]] .. escape ( v ) ..'"'		)
-		end
-		input = "(" .. tblconcat ( input , "&" ) .. ")"
-	elseif jit.os == "Linux" or jit.os == "OSX" or jit.os == "POSIX" or jit.os == "BSD" then
-		input = { "echo '"}
-		for i , v in ipairs ( headerfiles ) do
-			tblinsert ( input , [[#include "]] .. escape ( v ) ..'"\n' )
-		end
-		tblinsert ( input , "'" )
-		input = tblconcat ( input )
-	else
-		error ( "Unknown platform" )
-	end
 
-	local cmdline = {
-		input , "|";
-		preprocessor ;
-	}
+	local tmpfile = "tmp.h"--os.tmpname ( )
+	local input = assert ( io.open ( tmpfile , "w+" ) )
+
+	assert ( input:write ( definestr , "\n" ) )
+
+	for i , v in ipairs ( headerfiles ) do
+		assert ( input:write ( [[#include "]] , v ,'"\n' ) )
+	end
 	for k , v in pairs ( defines ) do
-		local def
 		if type ( v ) == "string" then
-			def = k .. [[=]] .. v
+			def = k .. [[ ]] .. v
 		elseif v == true then
 			def = k
 		end
-		tblinsert ( cmdline , [[-D"]] .. escape ( def ) .. [["]] )
+		assert ( input:write ( [[#define ]] , def , "\n" ) )
 	end
+	assert ( input:close ( ) )
+
+	local cmdline = {
+		preprocessor ;
+	}
+
 	for i , dir in ipairs ( include_dirs ) do
 		tblinsert ( cmdline , [[-I"]] .. escape ( dir ) .. [["]] )
 	end
-	tblinsert ( cmdline , "-" ) -- Take input from stdin
+	tblinsert ( cmdline , tmpfile )
 
 	if jit.os == "Windows" then
 		tblinsert( cmdline ,  [[2>nul]] )
@@ -61,10 +55,17 @@ local function ffi_process_headers ( headerfiles , defines )
 		error ( "Unknown platform" )
 	end
 
-	cmdline = tblconcat ( cmdline , " " )
-    local progfd = assert ( popen ( cmdline ) )
+	local progfd = assert ( popen ( tblconcat ( cmdline , " " ) ) )
 	local s = progfd:read ( "*a" )
 	assert ( progfd:close ( ) , "Could not process header files" )
+
+	cmdline [ 1 ] = defineprocessor
+	local progfd = assert ( popen ( tblconcat ( cmdline , " " ) ) )
+	definestr = progfd:read ( "*a" )
+	assert ( progfd:close ( ) , "Could not process header files" )
+
+	os.remove ( tmpfile )
+
 	return s
 end
 
