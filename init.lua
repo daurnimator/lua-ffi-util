@@ -26,7 +26,11 @@ local function ffi_process_headers ( headerfiles , defines )
 	assert ( input:write ( definestr , "\n" ) )
 
 	for i , v in ipairs ( headerfiles ) do
-		assert ( input:write ( [[#include "]] , v ,'"\n' ) )
+		if v:match ( [[^<.*>$]] ) then
+			assert ( input:write ( [[#include ]] , v ,'\n' ) )
+		else
+			assert ( input:write ( [[#include "]] , v ,'"\n' ) )
+		end
 	end
 	for k , v in pairs ( defines ) do
 		if type ( v ) == "string" then
