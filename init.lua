@@ -1,11 +1,14 @@
-local ffi = require"ffi"
 local assert , error = assert , error
-local ipairs = ipairs
+local ipairs , pairs = ipairs , pairs
 local tonumber = tonumber
-local setmetatable = setmetatable
+local type = type
 local tblconcat , tblinsert = table.concat , table.insert
 local ioopen , popen = io.open , io.popen
-local max = math.max
+local strgmatch = string.gmatch
+local osremove = os.remove
+
+local ffi = require"ffi"
+local osname = jit.os
 
 -- FFI utils
 local escapechars = [["\>|&]]
@@ -21,7 +24,7 @@ local function ffi_process_headers ( headerfiles , defines )
 	defines = defines or { }
 
 	local tmpfile = "tmp.h"--os.tmpname ( )
-	local input = assert ( io.open ( tmpfile , "w+" ) )
+	local input = assert ( ioopen ( tmpfile , "w+" ) )
 
 	assert ( input:write ( definestr , "\n" ) )
 
@@ -33,6 +36,7 @@ local function ffi_process_headers ( headerfiles , defines )
 		end
 	end
 	for k , v in pairs ( defines ) do
+		local def
 		if type ( v ) == "string" then
 			def = k .. [[ ]] .. v
 		elseif v == true then
@@ -51,9 +55,9 @@ local function ffi_process_headers ( headerfiles , defines )
 	end
 	tblinsert ( cmdline , tmpfile )
 
-	if jit.os == "Windows" then
+	if osname == "Windows" then
 		tblinsert( cmdline ,  [[2>nul]] )
-	elseif jit.os == "Linux" or jit.os == "OSX" or jit.os == "POSIX" or jit.os == "BSD" then
+	elseif osname == "Linux" or osname == "OSX" or osname == "POSIX" or osname == "BSD" then
 		tblinsert( cmdline ,  [[&2>/dev/null]] )
 	else
 		error ( "Unknown platform" )
@@ -68,7 +72,7 @@ local function ffi_process_headers ( headerfiles , defines )
 	definestr = progfd:read ( "*a" )
 	assert ( progfd:close ( ) , "Could not process header files" )
 
-	os.remove ( tmpfile )
+	osremove ( tmpfile )
 
 	return s , definestr
 end
@@ -135,15 +139,15 @@ local function ffi_add_include_dir ( dir )
 	tblinsert ( include_dirs , dir )
 end
 
-if jit.os == "Linux" or jit.os == "OSX" or jit.os == "POSIX" or jit.os == "BSD" then
+if osname == "Linux" or osname == "OSX" or osname == "POSIX" or osname == "BSD" then
 	ffi_add_include_dir [[/usr/include/]]
 end
 
 return {
-	ffi_process_headers 	= ffi_process_headers ;
-	ffi_process_defines 	= ffi_process_defines ;
-	ffi_defs 				= ffi_defs ;
+	ffi_process_headers   = ffi_process_headers ;
+	ffi_process_defines   = ffi_process_defines ;
+	ffi_defs              = ffi_defs ;
 
-	ffi_clear_include_dir 	= ffi_clear_include_dir ;
-	ffi_add_include_dir 	= ffi_add_include_dir ;
+	ffi_clear_include_dir = ffi_clear_include_dir ;
+	ffi_add_include_dir   = ffi_add_include_dir ;
 }
