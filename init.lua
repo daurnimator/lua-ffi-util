@@ -70,7 +70,7 @@ local function ffi_process_headers ( headerfiles , defines )
 
 	os.remove ( tmpfile )
 
-	return s
+	return s , definestr
 end
 
 local function ffi_process_defines ( headerfile , defines )
@@ -93,23 +93,34 @@ local function ffi_process_defines ( headerfile , defines )
 	return defines
 end
 
-local function ffi_defs ( defs_file , headers , skipcdef , defines )
-	local fd = ioopen ( defs_file )
-	local s
-	if fd then
-		s = fd:read ( "*a" )
+local function ffi_defs ( func_file , def_file , headers , skipcdef , skipdefines , defines )
+	local f_fd = ioopen ( func_file )
+	local d_fd = ioopen ( def_file )
+
+	local funcs , defs
+	if f_fd and d_fd then
+		funcs = f_fd:read ( "*a" )
+		defs = d_fd:read ( "*a" )
 	else
-		s = ffi_process_headers ( headers , defines )
-		fd = assert ( ioopen ( defs_file , "w" ) )
-		assert ( fd:write ( s ) )
+		funcs , defs = ffi_process_headers ( headers , defines )
+
+		f_fd = assert ( ioopen ( func_file , "w" ) )
+		d_fd = assert ( ioopen ( def_file , "w" ) )
+
+		assert ( f_fd:write ( funcs ) )
+		assert ( d_fd:write ( defs ) )
 	end
-	fd:close ( )
+	f_fd:close ( )
+	d_fd:close ( )
 
 	if not skipcdef then
-		ffi.cdef ( s )
+		ffi.cdef ( funcs )
+	end
+	if not skipdefines then
+		defs = ffi_process_defines ( defs )
 	end
 
-	return s
+	return funcs , defs
 end
 
 local function ffi_clear_include_dir ( dir )
