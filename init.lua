@@ -73,23 +73,27 @@ local function ffi_process_headers ( headerfiles , defines )
 	return s , definestr
 end
 
-local function ffi_process_defines ( headerfile , defines )
+local function ffi_process_defines ( str , defines , noresolve )
 	defines = defines or { }
-	local fd = ioopen ( headerfile ) -- Look in current dir first
-	for i , dir in ipairs ( include_dirs ) do
-		if fd then break end
-		fd = ioopen ( dir .. headerfile )
-	end
-	assert ( fd , "Can't find header: " .. headerfile )
 
-	--TODO: unifdef
-	for line in fd:lines ( ) do
-		local n ,v = line:match ( "#%s*define%s+(%S+)%s+([^/]+)" )
-		if n then
-			v = defines [ v ] or tonumber ( v ) or v
-			defines [ n ] = v
+	-- Extract constant definitions
+	for name , value in strgmatch ( str , "#%s*define%s+(%S+)%s+([^/\r\n]+)\r?\n" ) do
+		-- Convert to a number if possible
+		value = tonumber ( value ) or value
+		defines [ name ] = value
+	end
+
+	if not noresolve then
+		-- Resolve defines that have values of other defines
+		for k , v in pairs ( defines ) do
+			while true do
+				v = defines [ v ]
+				if v == nil then break end
+				defines [ k ] = v
+			end
 		end
 	end
+
 	return defines
 end
 
