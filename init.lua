@@ -4,7 +4,7 @@ local tonumber = tonumber
 local type = type
 local tblconcat , tblinsert = table.concat , table.insert
 local ioopen , popen = io.open , io.popen
-local strgmatch = string.gmatch
+local strfind , strformat , strgmatch , strmatch , strsub = string.find , string.format , string.gmatch , string.match , string.sub
 local osremove = os.remove
 
 local ffi = require"ffi"
@@ -77,28 +77,62 @@ local function ffi_process_headers ( headerfiles , defines )
 	return s , definestr
 end
 
-local function ffi_process_defines ( str , defines , noresolve )
+local function ffi_process_defines ( str , defines , warnings )
 	defines = defines or { }
+	warnings = warnings or { }
 
 	-- Extract constant definitions
-	for name , value in strgmatch ( str , "#%s*define%s+(%S+)%s+([^/\r\n]+)\r?\n" ) do
-		-- Convert to a number if possible
-		value = tonumber ( value ) or value
-		defines [ name ] = value
+	local linenum = 0
+	local line
+	local function warn ( msg )
+		tblinsert ( warnings , strformat ( "line %4d: %s\n" , linenum , msg ) )
 	end
 
-	if not noresolve then
-		-- Resolve defines that have values of other defines
-		for k , v in pairs ( defines ) do
-			while true do
-				v = defines [ v ]
-				if v == nil then break end
-				defines [ k ] = v
+	local e = 0
+	while true do
+		local s = e+1
+		local m
+		m , e = strfind ( str , "\r?\n" , e+1 )
+		if not e then break end
+		linenum = linenum + 1
+		if strsub ( str , m , m ) == [[\]] then -- Line continuation
+			error ( "Line continuations unsupported" )
+		end
+
+		if strsub ( str , s , s ) == "#" then
+			line = strsub ( str , s , m-1 )
+			local directive , text = strmatch ( line , "#%s*(%S+)%s+(.+)" )
+			if directive == "define" then
+				local name , value = strmatch ( text , "(%S+)%s*(.*)" )
+				if strmatch ( name , "([%w_]+)(%b())" ) then -- Macro
+					warn ( "Macros are unsupported" )
+				else
+					local value_n = tonumber ( value )
+					if value_n then
+						value = value_n
+					elseif value == "" then --Undefined evaluates to 0
+						value = 0
+					end
+					defines [ name ] = value
+				end
+			else
+				warn ( "Unsupported preproceesor directive: " .. directive )
 			end
 		end
 	end
 
-	return defines
+	-- Resolve dependancies
+	for n , v in pairs ( defines ) do
+		local visited = { [v] = true }
+		while true do
+			local newv = defines [ v ]
+			if newv == nil or visited [ newv ] then break end
+			visited [ newv ] = true
+			defines [ n ] = newv
+		end
+	end
+
+	return defines , warnings
 end
 
 local function ffi_defs ( func_file , def_file , headers , skipcdef , skipdefines , defines )
